@@ -1,0 +1,164 @@
+
+#include <Servo.h>
+
+Servo servoA;
+Servo servoB;
+
+void setup() {
+  servoA.attach(9);
+  servoB.attach(10);
+}
+
+void loop() {
+  servoA.write(0);
+  servoB.write(0);
+  delay(1000);
+  servoA.write(180);
+  servoB.write(180);
+  delay(1000);
+}
+
+// Dual-axis solar tracker: 4 LDR light sensors + 2 servo motors (Arduino Uno + Sensor Shield)
+// Reconstructed tracking logic written for the pin layout in the kit manual.
+// Sensors sit in four quadrants above the panel:
+//   TL (A0)  TR (A1)
+//   BL (A2)  BR (A3)
+// Each LDR module outputs an analog value on its S pin.
+
+#include <Servo.h>
+
+Servo servoH;  // horizontal axis (pan)
+Servo servoV;  // vertical axis (tilt)
+
+const int PIN_SERVO_H = 5;   // horizontal servo (signal pin D5)
+const int PIN_SERVO_V = 9;   // vertical servo (signal pin D9)
+
+const int SENS_TL = A0;
+const int SENS_TR = A1;
+const int SENS_BL = A2;
+const int SENS_BR = A3;
+
+// --- Settings to calibrate on the real hardware ---
+const int TOLERANCE  = 30;   // ignore small differences (0-1023 scale)
+const int MIN_LIGHT  = 300;  // average below this = not enough sunlight, hold position
+const int STEP       = 1;    // degrees moved per loop
+const int LOOP_DELAY = 30;   // ms between updates (smaller = faster tracking)
+
+// Set to -1 if a servo moves away from the light instead of toward it
+// (also check the readings: if brighter light gives LOWER values, invert the comparisons)
+const int DIR_H = 1;
+const int DIR_V = 1;
+
+const bool DEBUG = false;  // set true to print sensor values to the Serial Monitor
+
+int posH = 90;  // start in the middle of the 0-180 range
+int posV = 90;
+
+void setup() {
+  if (DEBUG) Serial.begin(9600);
+  servoH.attach(PIN_SERVO_H);
+  servoV.attach(PIN_SERVO_V);
+  servoH.write(posH);
+  servoV.write(posV);
+}
+
+void loop() {
+  int tl = analogRead(SENS_TL);
+  int tr = analogRead(SENS_TR);
+  int bl = analogRead(SENS_BL);
+  int br = analogRead(SENS_BR);
+
+  int average = (tl + tr + bl + br) / 4;
+
+  if (DEBUG) {
+    Serial.print(tl); Serial.print(' '); Serial.print(tr); Serial.print(' ');
+    Serial.print(bl); Serial.print(' '); Serial.println(br);
+  }
+
+  // Only react when there is strong light (sun), not dim room light
+  if (average > MIN_LIGHT) {
+    int top    = (tl + tr) / 2;
+    int bottom = (bl + br) / 2;
+    int left   = (tl + bl) / 2;
+    int right  = (tr + br) / 2;
+
+    // Vertical axis: move toward the brighter half
+    if (abs(top - bottom) > TOLERANCE) {
+      posV += (top > bottom) ? STEP * DIR_V : -STEP * DIR_V;
+    }
+
+    // Horizontal axis: move toward the brighter half
+    if (abs(left - right) > TOLERANCE) {
+      posH += (right > left) ? STEP * DIR_H : -STEP * DIR_H;
+    }
+
+    // Keep both servos inside their 0-180 degree range
+    posH = constrain(posH, 0, 180);
+    posV = constrain(posV, 0, 180);
+
+    servoH.write(posH);
+    servoV.write(posV);
+  }
+
+# Dual-Axis Solar Tracker (Arduino Uno, kit-based)
+
+A dual-axis solar tracker that keeps a solar panel pointed at the brightest light, assembled, wired and programmed as a student project at Bishkek Technical College (Kyrgyz State Technical University named after I. Razzakov).
+
+The hardware comes from a commercial DIY kit ("UNO R3 Smart Solar-Powered Light-Tracking DIY Kit", bought through a Chinese marketplace). This project is about assembling the kit, understanding how each module works, and programming the control logic.
+
+![Prototype](docs/prototype.jpg)
+
+## What the system does
+
+- Four LDR light sensors, mounted in four quadrants above the panel, measure where the light is strongest
+- Two MG90S servo motors pan (horizontal) and tilt (vertical) the panel toward the light
+- A 12 V, 1.92 W solar panel charges a two-cell Li-ion pack through a CN3795 MPPT charging module
+- The Arduino and servos run from the battery pack; a DC 9-24 V adapter can charge the pack and USB 5 V can also power the board
+
+## Hardware (from the kit)
+
+- Arduino Uno with Sensor Shield v5
+- 2 x MG90S servo motors
+- 4 x LDR photoresistor modules
+- 12 V 1.92 W solar panel
+- CN3795 MPPT solar charging module and battery box with 2 Li-ion cells
+- Laser-cut plywood frame
+
+## Pin assignment (from the kit manual)
+
+| Component | Arduino pin |
+|---|---|
+| Horizontal servo | D5 |
+| Vertical servo | D9 |
+| LDR top-left / top-right | A0 / A1 |
+| LDR bottom-left / bottom-right | A2 / A3 |
+
+## How the tracking logic works
+
+1. Read the four LDR sensors.
+2. Average the top, bottom, left and right pairs.
+3. If the average light is above `MIN_LIGHT`, move each servo one step toward the brighter side (only when the difference exceeds `TOLERANCE`).
+4. Repeat. In dim light the panel holds its position.
+
+## Project status and provenance
+
+| Part | Status |
+|---|---|
+| Kit hardware, frame, modules and manual | Commercial kit, not my own design |
+| Assembly and wiring | Done by me, following the manufacturer's manual (the kit arrived without the connection wires, which I sourced and connected myself) |
+| USB output port | Added by me as an extra 5 V output. A phone connected to it received battery power for a while; the pack is too small to charge a phone fully |
+| `servo_test` | Basic servo test routine (Arduino Servo library) |
+| `solar_tracker` | **Reconstructed.** The code I used was not preserved after the prototype was handed in to the college. The tracking logic was rewritten for this hardware using the pin layout from the manual. It has not been tested on the original hardware. |
+| Kit's own open-source firmware and manual | Not included here, they belong to the kit's manufacturer |
+
+## Author
+
+Alexey Lopatiev, student, Bishkek Technical College (KSTU named after I. Razzakov)
+
+
+
+
+
+
+  delay(LOOP_DELAY);
+}
